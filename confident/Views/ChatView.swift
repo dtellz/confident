@@ -52,15 +52,25 @@ struct ChatView: View {
                 .padding(.horizontal, 12)
                 .padding(.vertical, 8)
             }
-            .onChange(of: viewModel.messages.last?.id) { _, _ in scrollToBottom(proxy) }
-            .onChange(of: viewModel.messages.last?.content) { _, _ in scrollToBottom(proxy) }
-        }
-    }
-
-    private func scrollToBottom(_ proxy: ScrollViewProxy) {
-        guard let last = viewModel.messages.last else { return }
-        withAnimation(.easeOut(duration: 0.15)) {
-            proxy.scrollTo(last.id, anchor: .bottom)
+            // Animate the jump when a brand new message appears.
+            .onChange(of: viewModel.messages.last?.id) { _, _ in
+                guard let id = viewModel.messages.last?.id else { return }
+                withAnimation(.easeOut(duration: 0.15)) {
+                    proxy.scrollTo(id, anchor: .bottom)
+                }
+            }
+            // While the assistant is streaming, keep pinned to the bottom at a
+            // bounded cadence rather than reacting to every token. This avoids
+            // SwiftUI's "onChange tried to update multiple times per frame"
+            // warning under bursty token arrivals.
+            .task(id: viewModel.messages.last?.id) {
+                while !Task.isCancelled, viewModel.isAssistantTyping {
+                    if let id = viewModel.messages.last?.id {
+                        proxy.scrollTo(id, anchor: .bottom)
+                    }
+                    try? await Task.sleep(for: .milliseconds(80))
+                }
+            }
         }
     }
 
