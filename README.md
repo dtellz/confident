@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="logo.png" alt="Confident — Proximity Chatbot" width="520">
+</p>
+
 # Confident
 
 A proximity-based offline chatbot. The iOS app is a SwiftUI chat client; the
