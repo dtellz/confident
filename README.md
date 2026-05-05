@@ -41,6 +41,31 @@ Each frame is one JSON object sent as a single Multipeer payload:
 * Server → Client: `{"type":"token","content":"…"}` then `{"type":"done"}`
   (or `{"type":"error","message":"…"}` on failure)
 
+## Setup
+
+**Prerequisites**
+
+* macOS with Xcode installed (the Mac side uses the Swift toolchain that ships
+  with Xcode).
+* An iPhone or iOS Simulator on a recent iOS version. A real device is
+  recommended — Multipeer works in the simulator but is more reliable
+  device-to-Mac.
+* [LM Studio](https://lmstudio.ai), with at least one model downloaded.
+
+**Cloning and signing**
+
+The Xcode project is committed with the original author's `DEVELOPMENT_TEAM`
+and `PRODUCT_BUNDLE_IDENTIFIER` (`DiegoTellez.confident`). Neither is secret,
+but you'll need to replace both with your own before Xcode will sign and run
+the app on your device.
+
+In Xcode: select the `confident` target → **Signing & Capabilities** → set
+**Team** to your own Apple ID / team, and change the **Bundle Identifier** to
+something unique under your namespace (e.g. `com.yourname.confident`).
+
+The macOS server has no signing requirements — `swift run` builds and launches
+it directly with no extra setup.
+
 ## Run the macOS server
 
 1. Install LM Studio, download a model, and click **Start Server** (default port
