@@ -20,8 +20,9 @@ nonisolated final class MultipeerClient: NSObject, @unchecked Sendable {
 
     private let serviceType: String
     private let myPeerID: MCPeerID
-    private let session: MCSession
-    private let browser: MCNearbyServiceBrowser
+    private var session: MCSession
+    private var browser: MCNearbyServiceBrowser
+    private var lastConnectedPeer: MCPeerID?
 
     private let stateContinuation: AsyncStream<ConnectionState>.Continuation
     let state: AsyncStream<ConnectionState>
@@ -76,6 +77,30 @@ nonisolated final class MultipeerClient: NSObject, @unchecked Sendable {
         Log.info("Multipeer", "Stopped browsing and disconnected")
     }
 
+    /// Tear down the MCSession and browser entirely and recreate them.
+    /// Multipeer's internal session state can go stale after a failed connect
+    /// (most commonly: the peer's `<uuid>.local` hostname stops resolving even
+    /// though Bonjour browse still works). Rebuilding is the only reliable
+    /// recovery short of restarting the app.
+    func restart() {
+        Log.warn("Multipeer", "Rebuilding session and browser to clear stale state")
+        browser.stopBrowsingForPeers()
+        session.disconnect()
+
+        session = MCSession(peer: myPeerID,
+                            securityIdentity: nil,
+                            encryptionPreference: .required)
+        session.delegate = self
+
+        browser = MCNearbyServiceBrowser(peer: myPeerID, serviceType: serviceType)
+        browser.delegate = self
+        browser.startBrowsingForPeers()
+
+        lastConnectedPeer = nil
+        stateContinuation.yield(.browsing)
+        Log.info("Multipeer", "Rebuilt — resumed browsing for \"\(serviceType)\"")
+    }
+
     func send(_ frame: ChatProtocol.ClientFrame) throws {
         guard !session.connectedPeers.isEmpty else {
             Log.warn("Multipeer", "send() called with no connected peers")
@@ -122,11 +147,18 @@ nonisolated extension MultipeerClient: MCSessionDelegate {
             Log.info("Multipeer", "Session → connecting for \(peerID.displayName)")
             stateContinuation.yield(.connecting(peerName: peerID.displayName))
         case .connected:
+            lastConnectedPeer = peerID
             Log.info("Multipeer", "Session → CONNECTED for \(peerID.displayName) ✓")
             stateContinuation.yield(.connected(peerName: peerID.displayName))
         case .notConnected:
-            Log.info("Multipeer", "Session → notConnected for \(peerID.displayName); resume browsing")
+            let everConnected = lastConnectedPeer == peerID
+            Log.info("Multipeer", "Session → notConnected for \(peerID.displayName) (everConnected=\(everConnected))")
             stateContinuation.yield(.browsing)
+            if !everConnected {
+                // Failed to ever reach `connected` — almost always means the
+                // session's internal state went stale. Rebuild from scratch.
+                restart()
+            }
         @unknown default:
             Log.warn("Multipeer", "Session → unknown state for \(peerID.displayName)")
         }

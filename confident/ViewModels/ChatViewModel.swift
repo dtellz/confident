@@ -42,6 +42,13 @@ final class ChatViewModel {
         }
     }
 
+    /// Manually rebuild the Multipeer session — exposed in the UI as a refresh
+    /// button. Useful when a connection attempt has stalled in `connecting`.
+    func reconnect() {
+        Log.info("ViewModel", "Manual reconnect requested")
+        transport.restart()
+    }
+
     func sendDraft() {
         let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { return }

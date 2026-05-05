@@ -14,6 +14,14 @@ struct ChatView: View {
             .navigationTitle("Confident")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button {
+                        viewModel.reconnect()
+                    } label: {
+                        Image(systemName: "arrow.clockwise")
+                    }
+                    .help("Rebuild the Multipeer session")
+                }
                 ToolbarItem(placement: .topBarTrailing) {
                     ConnectionStatusView(state: viewModel.connectionState)
                 }
