@@ -86,7 +86,17 @@ final class ChatViewModel {
     private func appendTokenToStreamingMessage(_ chunk: String) {
         guard let id = streamingMessageID,
               let idx = messages.firstIndex(where: { $0.id == id }) else { return }
-        messages[idx].content.append(chunk)
+        // Many LMs emit leading whitespace (e.g. "\n\n") as their first chunks,
+        // which renders as an empty band at the top of the bubble. Drop
+        // whitespace until the bubble has visible content, then append verbatim.
+        if messages[idx].content.isEmpty {
+            let trimmed = chunk.drop(while: { $0.isWhitespace })
+            if !trimmed.isEmpty {
+                messages[idx].content = String(trimmed)
+            }
+        } else {
+            messages[idx].content.append(chunk)
+        }
     }
 
     private func finalizeStreamingMessage() {
