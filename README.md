@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="logo.png" alt="Confident — Proximity Chatbot" width="520">
+  <img src="assets/logo.png" alt="Confident — Proximity Chatbot" width="520">
 </p>
 
 # Confident
@@ -8,6 +8,24 @@ A proximity-based offline chatbot. The iOS app is a SwiftUI chat client; the
 macOS server runs an LLM locally via [LM Studio](https://lmstudio.ai). The two
 sides find each other over **Multipeer Connectivity** (Bluetooth + peer-to-peer
 Wi-Fi), so no internet, router, or external services are required.
+
+## Screenshots
+
+<p align="center">
+  <img src="assets/IMG_7946.PNG" alt="Searching for the Mac" width="22%">
+  <img src="assets/IMG_7947.PNG" alt="Establishing the secure Multipeer session" width="22%">
+  <img src="assets/IMG_7948.PNG" alt="Connected and ready" width="22%">
+  <img src="assets/IMG_7949.PNG" alt="Live streaming conversation with the local model" width="22%">
+</p>
+
+<p align="center">
+  <sub>
+    <b>Searching</b> for the Mac over Bluetooth + AWDL ·
+    <b>Connecting</b> through the encrypted Multipeer handshake ·
+    <b>Online</b> and ready to chat ·
+    <b>Streaming</b> tokens live from a local model
+  </sub>
+</p>
 
 ```
 ┌──────────┐     Multipeer (encrypted)      ┌──────────────┐     localhost      ┌────────────┐
