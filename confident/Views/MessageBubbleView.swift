@@ -3,15 +3,20 @@ import SwiftUI
 struct MessageBubbleView: View {
     let message: ChatMessage
 
+    @ViewBuilder
     var body: some View {
-        HStack(alignment: .bottom, spacing: 10) {
-            if message.role == .user { Spacer(minLength: 60) }
+        // While the assistant message is empty and still streaming, the typing
+        // indicator is already shown — don't render an empty bubble next to it.
+        if !(message.isStreaming && message.content.isEmpty) {
+            HStack(alignment: .bottom, spacing: 10) {
+                if message.role == .user { Spacer(minLength: 60) }
 
-            if message.role == .assistant { assistantAvatar }
+                if message.role == .assistant { assistantAvatar }
 
-            bubble
+                bubble
 
-            if message.role == .assistant { Spacer(minLength: 60) }
+                if message.role == .assistant { Spacer(minLength: 60) }
+            }
         }
     }
 
@@ -71,7 +76,6 @@ struct MessageBubbleView: View {
     }
 
     private var displayContent: String {
-        if message.isStreaming && message.content.isEmpty { return "▍" }
         if message.isStreaming { return message.content + " ▍" }
         return message.content
     }
