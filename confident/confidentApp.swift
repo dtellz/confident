@@ -1,4 +1,5 @@
 import SwiftUI
+import SwiftData
 
 @main
 struct confidentApp: App {
@@ -6,5 +7,6 @@ struct confidentApp: App {
         WindowGroup {
             ChatView()
         }
+        .modelContainer(for: [Conversation.self, Message.self])
     }
 }

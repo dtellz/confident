@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct MessageBubbleView: View {
-    let message: ChatMessage
+    let message: Message
 
     @ViewBuilder
     var body: some View {
@@ -59,7 +59,7 @@ struct MessageBubbleView: View {
         switch message.role {
         case .user:
             Theme.brand
-        case .assistant:
+        case .assistant, .system:
             ZStack {
                 Rectangle().fill(.ultraThinMaterial)
                 Theme.bgElevated.opacity(0.55)
@@ -87,14 +87,14 @@ struct MessageBubbleView: View {
     private var strokeStyle: AnyShapeStyle {
         switch message.role {
         case .user: AnyShapeStyle(Color.white.opacity(0.30))
-        case .assistant: AnyShapeStyle(Theme.strokeTint)
+        case .assistant, .system: AnyShapeStyle(Theme.strokeTint)
         }
     }
 
     private var shadowColor: Color {
         switch message.role {
         case .user: Theme.neonViolet.opacity(0.45)
-        case .assistant: .black.opacity(0.5)
+        case .assistant, .system: .black.opacity(0.5)
         }
     }
 }

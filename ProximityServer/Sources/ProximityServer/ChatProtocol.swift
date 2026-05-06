@@ -1,29 +1,41 @@
 import Foundation
 
-/// Wire format mirror of the iOS-side `ChatProtocol`. Kept locally so the macOS
-/// server compiles standalone — both sides must change together.
+/// Wire format mirror of the iOS-side `ChatProtocol`. Both sides must change
+/// together.
 enum ChatProtocol {
 
-    enum ClientFrame: Codable, Sendable {
-        case message(content: String)
+    struct Turn: Codable, Sendable, Equatable {
+        enum Role: String, Codable, Sendable { case system, user, assistant }
+        let role: Role
+        let content: String
+    }
 
-        private enum Kind: String, Codable { case message }
-        private enum Keys: String, CodingKey { case type, content }
+    enum ClientFrame: Codable, Sendable {
+        case chat(history: [Turn])
+        case generateTitle(history: [Turn])
+
+        private enum Kind: String, Codable { case chat, generateTitle }
+        private enum Keys: String, CodingKey { case type, history }
 
         init(from decoder: Decoder) throws {
             let c = try decoder.container(keyedBy: Keys.self)
             switch try c.decode(Kind.self, forKey: .type) {
-            case .message:
-                self = .message(content: try c.decode(String.self, forKey: .content))
+            case .chat:
+                self = .chat(history: try c.decode([Turn].self, forKey: .history))
+            case .generateTitle:
+                self = .generateTitle(history: try c.decode([Turn].self, forKey: .history))
             }
         }
 
         func encode(to encoder: Encoder) throws {
             var c = encoder.container(keyedBy: Keys.self)
             switch self {
-            case .message(let content):
-                try c.encode(Kind.message, forKey: .type)
-                try c.encode(content, forKey: .content)
+            case .chat(let h):
+                try c.encode(Kind.chat, forKey: .type)
+                try c.encode(h, forKey: .history)
+            case .generateTitle(let h):
+                try c.encode(Kind.generateTitle, forKey: .type)
+                try c.encode(h, forKey: .history)
             }
         }
     }
@@ -31,9 +43,10 @@ enum ChatProtocol {
     enum ServerFrame: Codable, Sendable {
         case token(content: String)
         case done
+        case title(content: String)
         case error(message: String)
 
-        private enum Kind: String, Codable { case token, done, error }
+        private enum Kind: String, Codable { case token, done, title, error }
         private enum Keys: String, CodingKey { case type, content, message }
 
         init(from decoder: Decoder) throws {
@@ -43,6 +56,8 @@ enum ChatProtocol {
                 self = .token(content: try c.decode(String.self, forKey: .content))
             case .done:
                 self = .done
+            case .title:
+                self = .title(content: try c.decode(String.self, forKey: .content))
             case .error:
                 self = .error(message: try c.decode(String.self, forKey: .message))
             }
@@ -56,6 +71,9 @@ enum ChatProtocol {
                 try c.encode(content, forKey: .content)
             case .done:
                 try c.encode(Kind.done, forKey: .type)
+            case .title(let content):
+                try c.encode(Kind.title, forKey: .type)
+                try c.encode(content, forKey: .content)
             case .error(let message):
                 try c.encode(Kind.error, forKey: .type)
                 try c.encode(message, forKey: .message)

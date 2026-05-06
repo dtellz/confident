@@ -3,7 +3,7 @@ import Foundation
 /// Small logger that prints to stdout with a timestamp and category, so output
 /// is visible in Xcode's console regardless of os_log filtering.
 enum Log {
-    private static let formatter: DateFormatter = {
+    nonisolated(unsafe) private static let formatter: DateFormatter = {
         let f = DateFormatter()
         f.dateFormat = "HH:mm:ss.SSS"
         return f

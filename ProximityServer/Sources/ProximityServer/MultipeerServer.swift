@@ -85,6 +85,7 @@ final class MultipeerServer: NSObject, @unchecked Sendable {
         switch frame {
         case .token(let c): return "token(\(c.count) chars)"
         case .done: return "done"
+        case .title(let t): return "title(\"\(t)\")"
         case .error(let m): return "error(\"\(m)\")"
         }
     }
@@ -129,8 +130,11 @@ extension MultipeerServer: MCSessionDelegate {
         do {
             let frame = try decoder.decode(ChatProtocol.ClientFrame.self, from: data)
             switch frame {
-            case .message(let content):
-                Log.info("Multipeer", "Frame ← \(peerID.displayName): message(\(content.count) chars) — \"\(content.prefix(80))\(content.count > 80 ? "…" : "")\"")
+            case .chat(let history):
+                let last = history.last?.content ?? ""
+                Log.info("Multipeer", "Frame ← \(peerID.displayName): chat(\(history.count) turns) — last=\"\(last.prefix(80))\(last.count > 80 ? "…" : "")\"")
+            case .generateTitle(let history):
+                Log.info("Multipeer", "Frame ← \(peerID.displayName): generateTitle(\(history.count) turns)")
             }
             eventContinuation.yield(.frame(peerID, frame))
         } catch {
