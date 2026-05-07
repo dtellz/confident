@@ -26,6 +26,11 @@ final class ChatViewModel {
     /// frame returns we apply it here, regardless of `currentConversation`.
     private var pendingTitleConversation: Conversation?
 
+    /// Last state we observed on the transport, used to detect transitions
+    /// into `.connected` so we can resume any orphan streams from a session
+    /// that ended mid-response (app closed, or rebuild after a failed connect).
+    private var previousConnectionState: MultipeerClient.ConnectionState = .idle
+
     init(transport: MultipeerClient? = nil) {
         self.transport = transport ?? MultipeerClient(displayName: UIDevice.current.name)
     }
@@ -53,7 +58,13 @@ final class ChatViewModel {
         Task { [weak self] in
             guard let self else { return }
             for await s in self.transport.state {
+                let wasConnected = Self.isConnected(self.previousConnectionState)
+                let nowConnected = Self.isConnected(s)
                 self.connectionState = s
+                if !wasConnected && nowConnected {
+                    self.resumeOrphanStreamsIfNeeded()
+                }
+                self.previousConnectionState = s
             }
         }
         Task { [weak self] in
@@ -62,6 +73,11 @@ final class ChatViewModel {
                 self.handle(frame)
             }
         }
+    }
+
+    private static func isConnected(_ state: MultipeerClient.ConnectionState) -> Bool {
+        if case .connected = state { return true }
+        return false
     }
 
     func reconnect() {
@@ -218,5 +234,70 @@ final class ChatViewModel {
         conv.title = trimmed
         try? modelContext?.save()
         Log.info("ViewModel", "Title applied: \"\(trimmed)\"")
+    }
+
+    // MARK: - Orphan stream resumption
+
+    /// Called every time the transport transitions into `.connected`.
+    ///
+    /// If a previous session ended mid-response (the user closed the app while
+    /// streaming, or the connection dropped and was rebuilt), we'll find
+    /// assistant Messages persisted with `isStreaming == true` and a
+    /// conversation whose last entry is a user prompt with no reply. Those
+    /// would otherwise sit forever as stuck bubbles. We delete the orphan
+    /// streaming bubble(s) and re-issue the chat request for the most recent
+    /// affected conversation, so the user gets a fresh complete response.
+    private func resumeOrphanStreamsIfNeeded() {
+        guard let context = modelContext else { return }
+
+        let descriptor = FetchDescriptor<Message>(
+            predicate: #Predicate { $0.isStreaming == true }
+        )
+        guard let orphans = try? context.fetch(descriptor), !orphans.isEmpty else { return }
+
+        Log.info("ViewModel", "Cleaning up \(orphans.count) orphan streaming message(s) on (re)connect")
+
+        for msg in orphans {
+            if msg.id == streamingMessage?.id {
+                streamingMessage = nil
+            }
+            context.delete(msg)
+        }
+        try? context.save()
+
+        // Find the most recent conversation whose last message is a user prompt
+        // (i.e. the assistant's reply was lost). Re-issue exactly one — Multipeer
+        // can only handle one in-flight stream per peer anyway.
+        let convDescriptor = FetchDescriptor<Conversation>(
+            sortBy: [SortDescriptor(\Conversation.updatedAt, order: .reverse)]
+        )
+        guard let conversations = try? context.fetch(convDescriptor) else { return }
+
+        for conv in conversations {
+            guard let last = conv.orderedMessages.last, last.role == .user else { continue }
+            Log.info("ViewModel", "Re-issuing chat in conversation \(conv.id) (dangling user message)")
+            reissueChat(in: conv)
+            return
+        }
+    }
+
+    private func reissueChat(in conversation: Conversation) {
+        guard let context = modelContext else { return }
+
+        let assistant = Message(role: .assistant, content: "", isStreaming: true)
+        assistant.conversation = conversation
+        context.insert(assistant)
+        streamingMessage = assistant
+        conversation.updatedAt = .now
+        try? context.save()
+
+        do {
+            try transport.send(.chat(history: conversation.wireHistory()))
+        } catch {
+            Log.warn("ViewModel", "Failed to re-issue chat: \(error)")
+            context.delete(assistant)
+            streamingMessage = nil
+            try? context.save()
+        }
     }
 }
