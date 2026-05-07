@@ -119,7 +119,13 @@ actor ChatSession {
         if history.first?.role != .system {
             out.append(.init(role: .system, content: system))
         }
-        out.append(contentsOf: history.map { .init(role: .init(wireRole: $0.role), content: $0.content) })
+        out.append(contentsOf: history.map { wire in
+            .init(
+                role: .init(wireRole: wire.role),
+                content: wire.content,
+                images: wire.images ?? []
+            )
+        })
         return out
     }
 

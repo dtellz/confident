@@ -9,6 +9,15 @@ struct LMStudioClient {
         enum Role: String, Codable, Sendable { case system, user, assistant }
         let role: Role
         let content: String
+        /// Raw image bytes (assumed JPEG by the iOS client). If non-empty,
+        /// this turn is serialized as an OpenAI multimodal `content` array.
+        let images: [Data]
+
+        init(role: Role, content: String, images: [Data] = []) {
+            self.role = role
+            self.content = content
+            self.images = images
+        }
     }
 
     struct Configuration: Sendable {
@@ -51,7 +60,7 @@ struct LMStudioClient {
 
         let body = RequestBody(
             model: configuration.model,
-            messages: messages.map { .init(role: $0.role.rawValue, content: $0.content) },
+            messages: messages.map(Self.encodeMessage),
             stream: true,
             temperature: configuration.temperature
         )
@@ -89,8 +98,55 @@ struct LMStudioClient {
 
     // MARK: - DTOs
 
+    /// Convert a ChatTurn into the request DTO. Text-only turns serialize
+    /// `content` as a plain string (most compatible with non-vision models).
+    /// Turns with images serialize `content` as an array of OpenAI-style
+    /// content parts: a single text part (if any text), followed by one
+    /// `image_url` part per image, encoded as a base64 data URI.
+    private static func encodeMessage(_ turn: ChatTurn) -> RequestBody.Message {
+        if turn.images.isEmpty {
+            return RequestBody.Message(role: turn.role.rawValue, content: .text(turn.content))
+        }
+        var parts: [RequestBody.Message.Part] = []
+        if !turn.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            parts.append(.init(type: "text", text: turn.content, image_url: nil))
+        }
+        for data in turn.images {
+            let dataURL = "data:image/jpeg;base64,\(data.base64EncodedString())"
+            parts.append(.init(type: "image_url", text: nil, image_url: .init(url: dataURL)))
+        }
+        return RequestBody.Message(role: turn.role.rawValue, content: .parts(parts))
+    }
+
     private struct RequestBody: Encodable {
-        struct Message: Encodable { let role: String; let content: String }
+        struct Message: Encodable {
+            let role: String
+            let content: Content
+
+            enum Content: Encodable {
+                case text(String)
+                case parts([Part])
+
+                func encode(to encoder: Encoder) throws {
+                    var c = encoder.singleValueContainer()
+                    switch self {
+                    case .text(let s): try c.encode(s)
+                    case .parts(let p): try c.encode(p)
+                    }
+                }
+            }
+
+            struct Part: Encodable {
+                let type: String        // "text" or "image_url"
+                let text: String?
+                let image_url: ImageURL?
+
+                struct ImageURL: Encodable {
+                    let url: String
+                }
+            }
+        }
+
         let model: String
         let messages: [Message]
         let stream: Bool

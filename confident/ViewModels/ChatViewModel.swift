@@ -14,6 +14,12 @@ final class ChatViewModel {
     /// send, so we don't pollute the list with empty "New Chat" entries.
     var currentConversation: Conversation?
 
+    /// Pending image attachments for the next message. Already compressed
+    /// (JPEG, ~1024px) so sendDraft can write them straight to SwiftData
+    /// and the wire without any per-send work.
+    private(set) var attachedImages: [Data] = []
+    static let maxAttachments = 4
+
     private let transport: MultipeerClient
     private var modelContext: ModelContext?
 
@@ -120,11 +126,33 @@ final class ChatViewModel {
         try? modelContext?.save()
     }
 
+    // MARK: - Attachments
+
+    /// Append a compressed image to the next outgoing message. Silently
+    /// drops if we're already at the cap.
+    func attach(image data: Data) {
+        guard attachedImages.count < Self.maxAttachments else { return }
+        attachedImages.append(data)
+    }
+
+    func removeAttachment(at index: Int) {
+        guard attachedImages.indices.contains(index) else { return }
+        attachedImages.remove(at: index)
+    }
+
+    func clearAttachments() {
+        attachedImages.removeAll()
+    }
+
     // MARK: - Send
 
     func sendDraft() {
         let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !text.isEmpty, isConnected, let context = modelContext else { return }
+        let hasText = !text.isEmpty
+        let hasImages = !attachedImages.isEmpty
+        // Vision models can take an image with no text, so allow image-only
+        // turns. Block only when the user has nothing at all.
+        guard (hasText || hasImages), isConnected, let context = modelContext else { return }
 
         // Lazy-create the conversation on the first message of a new thread.
         let conversation: Conversation
@@ -140,6 +168,14 @@ final class ChatViewModel {
         user.conversation = conversation
         context.insert(user)
 
+        // Persist the image attachments alongside the user message. Cascading
+        // delete on Message will sweep them when the conversation is purged.
+        for imgData in attachedImages {
+            let img = MessageImage(data: imgData)
+            img.message = user
+            context.insert(img)
+        }
+
         let assistant = Message(role: .assistant, content: "", isStreaming: true)
         assistant.conversation = conversation
         context.insert(assistant)
@@ -147,6 +183,7 @@ final class ChatViewModel {
 
         conversation.updatedAt = .now
         draft = ""
+        attachedImages.removeAll()
         try? context.save()
 
         do {

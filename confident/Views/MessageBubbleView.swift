@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 struct MessageBubbleView: View {
     let message: Message
@@ -7,7 +8,10 @@ struct MessageBubbleView: View {
     var body: some View {
         // While the assistant message is empty and still streaming, the typing
         // indicator is already shown — don't render an empty bubble next to it.
-        if !(message.isStreaming && message.content.isEmpty) {
+        // A user message with images but no text still renders.
+        let hasImages = !message.images.isEmpty
+        let hasText = !message.content.isEmpty
+        if !(message.isStreaming && !hasText) || hasImages {
             HStack(alignment: .bottom, spacing: 10) {
                 if message.role == .user { Spacer(minLength: 60) }
 
@@ -35,16 +39,21 @@ struct MessageBubbleView: View {
     }
 
     private var bubble: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            Text(displayContent)
-                .textSelection(.enabled)
-                .font(font)
-                .foregroundStyle(textColor)
-                .multilineTextAlignment(.leading)
-                .fixedSize(horizontal: false, vertical: true)
+        VStack(alignment: .leading, spacing: 8) {
+            if !message.images.isEmpty {
+                imageStack
+            }
+            if !message.content.isEmpty || message.isStreaming {
+                Text(displayContent)
+                    .textSelection(.enabled)
+                    .font(font)
+                    .foregroundStyle(textColor)
+                    .multilineTextAlignment(.leading)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 12)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
         .background(bubbleBackground)
         .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
         .overlay(
@@ -52,6 +61,23 @@ struct MessageBubbleView: View {
                 .stroke(strokeStyle, lineWidth: 1)
         )
         .shadow(color: shadowColor, radius: 14, y: 6)
+    }
+
+    /// Stack of attached images. Each rendered at its native aspect ratio,
+    /// capped at 240pt wide. Vertical layout — multi-image messages produce
+    /// a tall bubble, which the parent ScrollView handles fine.
+    private var imageStack: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            ForEach(message.images) { img in
+                if let uiImage = UIImage(data: img.data) {
+                    Image(uiImage: uiImage)
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                        .frame(maxWidth: 240)
+                        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                }
+            }
+        }
     }
 
     @ViewBuilder

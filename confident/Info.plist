@@ -48,6 +48,8 @@
 	</array>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>Confident uses your local network to discover and chat with the macOS server running nearby.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Confident uses the camera so you can attach a photo to your message.</string>
 	<key>NSBonjourServices</key>
 	<array>
 		<string>_prox-chat._tcp</string>

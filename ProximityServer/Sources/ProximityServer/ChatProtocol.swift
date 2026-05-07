@@ -8,6 +8,13 @@ enum ChatProtocol {
         enum Role: String, Codable, Sendable { case system, user, assistant }
         let role: Role
         let content: String
+        var images: [Data]?
+
+        init(role: Role, content: String, images: [Data]? = nil) {
+            self.role = role
+            self.content = content
+            self.images = images
+        }
     }
 
     enum ClientFrame: Codable, Sendable {

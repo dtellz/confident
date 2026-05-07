@@ -132,7 +132,9 @@ extension MultipeerServer: MCSessionDelegate {
             switch frame {
             case .chat(let history):
                 let last = history.last?.content ?? ""
-                Log.info("Multipeer", "Frame ← \(peerID.displayName): chat(\(history.count) turns) — last=\"\(last.prefix(80))\(last.count > 80 ? "…" : "")\"")
+                let images = history.last?.images?.count ?? 0
+                let imgSuffix = images > 0 ? " + \(images) image(s)" : ""
+                Log.info("Multipeer", "Frame ← \(peerID.displayName): chat(\(history.count) turns)\(imgSuffix) — last=\"\(last.prefix(80))\(last.count > 80 ? "…" : "")\"")
             case .generateTitle(let history):
                 Log.info("Multipeer", "Frame ← \(peerID.displayName): generateTitle(\(history.count) turns)")
             }

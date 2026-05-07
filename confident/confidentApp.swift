@@ -7,6 +7,6 @@ struct confidentApp: App {
         WindowGroup {
             ChatView()
         }
-        .modelContainer(for: [Conversation.self, Message.self])
+        .modelContainer(for: [Conversation.self, Message.self, MessageImage.self])
     }
 }

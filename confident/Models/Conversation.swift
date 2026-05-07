@@ -37,6 +37,10 @@ final class Message {
     /// Persisted so the streaming caret reappears if the app is killed mid-stream.
     var isStreaming: Bool
     var conversation: Conversation?
+    /// Attachments rendered above the bubble's text. Cascading: dropping a
+    /// Message drops its images.
+    @Relationship(deleteRule: .cascade, inverse: \MessageImage.message)
+    var images: [MessageImage]
 
     var role: Role {
         get { Role(rawValue: roleRaw) ?? .user }
@@ -51,12 +55,32 @@ final class Message {
          role: Role,
          content: String,
          createdAt: Date = .now,
-         isStreaming: Bool = false) {
+         isStreaming: Bool = false,
+         images: [MessageImage] = []) {
         self.id = id
         self.roleRaw = role.rawValue
         self.content = content
         self.createdAt = createdAt
         self.isStreaming = isStreaming
+        self.images = images
+    }
+}
+
+/// Image attached to a Message. The bytes live on the file system thanks to
+/// `.externalStorage`, so listing/scrolling messages doesn't load megabytes
+/// of image data into memory; the data is only fetched when the bubble
+/// actually renders the image.
+@Model
+final class MessageImage {
+    @Attribute(.unique) var id: UUID
+    @Attribute(.externalStorage) var data: Data
+    var createdAt: Date
+    var message: Message?
+
+    init(id: UUID = UUID(), data: Data, createdAt: Date = .now) {
+        self.id = id
+        self.data = data
+        self.createdAt = createdAt
     }
 }
 
@@ -73,17 +97,26 @@ extension Conversation {
 
     /// Convert this conversation's messages to wire-protocol turns for sending
     /// to the server. Filters out empty assistant messages still streaming
-    /// (they haven't received any tokens yet).
+    /// (they haven't received any tokens yet). Carries any attached images
+    /// through as raw bytes — the server converts them to OpenAI multimodal
+    /// content parts before relaying to LM Studio.
     func wireHistory() -> [ChatProtocol.Turn] {
         orderedMessages.compactMap { msg in
             let trimmed = msg.content.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !trimmed.isEmpty else { return nil }
+            let imageData = msg.images.map(\.data)
+            // A turn is meaningful if it has text OR images (vision models
+            // accept image-only prompts).
+            guard !trimmed.isEmpty || !imageData.isEmpty else { return nil }
             let role: ChatProtocol.Turn.Role = switch msg.role {
             case .user: .user
             case .assistant: .assistant
             case .system: .system
             }
-            return ChatProtocol.Turn(role: role, content: msg.content)
+            return ChatProtocol.Turn(
+                role: role,
+                content: msg.content,
+                images: imageData.isEmpty ? nil : imageData
+            )
         }
     }
 }

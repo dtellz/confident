@@ -19,6 +19,9 @@ struct ChatView: View {
                 ComposerView(
                     text: $viewModel.draft,
                     isConnected: viewModel.isConnected,
+                    attachedImages: viewModel.attachedImages,
+                    onAttach: viewModel.attach(image:),
+                    onRemoveAttachment: viewModel.removeAttachment(at:),
                     onSend: viewModel.sendDraft
                 )
             }
@@ -204,5 +207,5 @@ struct ChatView: View {
 
 #Preview {
     ChatView()
-        .modelContainer(for: [Conversation.self, Message.self], inMemory: true)
+        .modelContainer(for: [Conversation.self, Message.self, MessageImage.self], inMemory: true)
 }

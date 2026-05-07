@@ -9,10 +9,21 @@ import Foundation
 nonisolated enum ChatProtocol {
 
     /// One turn in a conversation, in OpenAI-style role/content shape.
+    /// `images` carries raw image bytes (typically JPEG/PNG, downscaled to
+    /// ~1024px on the longest edge before sending). The server translates
+    /// these into OpenAI multimodal `image_url` parts when relaying to LM
+    /// Studio. `nil` or empty array means a text-only turn.
     struct Turn: Codable, Sendable, Equatable {
         enum Role: String, Codable, Sendable { case system, user, assistant }
         let role: Role
         let content: String
+        var images: [Data]?
+
+        init(role: Role, content: String, images: [Data]? = nil) {
+            self.role = role
+            self.content = content
+            self.images = images
+        }
     }
 
     enum ClientFrame: Codable, Sendable {
