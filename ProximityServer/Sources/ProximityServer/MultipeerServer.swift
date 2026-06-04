@@ -87,6 +87,7 @@ final class MultipeerServer: NSObject, @unchecked Sendable {
         case .done: return "done"
         case .title(let t): return "title(\"\(t)\")"
         case .error(let m): return "error(\"\(m)\")"
+        case .backends(let s, let p): return "backends(\(s.count) ports, active=\(p))"
         }
     }
 
@@ -137,6 +138,10 @@ extension MultipeerServer: MCSessionDelegate {
                 Log.info("Multipeer", "Frame ← \(peerID.displayName): chat(\(history.count) turns)\(imgSuffix) — last=\"\(last.prefix(80))\(last.count > 80 ? "…" : "")\"")
             case .generateTitle(let history):
                 Log.info("Multipeer", "Frame ← \(peerID.displayName): generateTitle(\(history.count) turns)")
+            case .detectBackends:
+                Log.info("Multipeer", "Frame ← \(peerID.displayName): detectBackends")
+            case .setBackend(let port):
+                Log.info("Multipeer", "Frame ← \(peerID.displayName): setBackend(port \(port))")
             }
             eventContinuation.yield(.frame(peerID, frame))
         } catch {

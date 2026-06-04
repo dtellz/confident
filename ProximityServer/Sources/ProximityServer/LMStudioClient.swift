@@ -25,6 +25,8 @@ struct LMStudioClient {
         /// LM Studio ignores `model` when only one is loaded; "local-model" is fine.
         var model: String = "local-model"
         var temperature: Double = 0.7
+        /// Sent as a Bearer token. Required by omlx; ignored by LM Studio/llama.cpp.
+        var apiKey: String = BackendDetector.apiKey
     }
 
     let configuration: Configuration
@@ -56,6 +58,9 @@ struct LMStudioClient {
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue("text/event-stream", forHTTPHeaderField: "Accept")
+        if !configuration.apiKey.isEmpty {
+            request.setValue("Bearer \(configuration.apiKey)", forHTTPHeaderField: "Authorization")
+        }
         request.timeoutInterval = 600
 
         let body = RequestBody(

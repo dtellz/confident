@@ -8,6 +8,7 @@ struct ChatView: View {
     @State private var viewModel = ChatViewModel()
     @State private var didStart = false
     @State private var showHistory = false
+    @State private var showSettings = false
 
     var body: some View {
         ZStack {
@@ -34,6 +35,9 @@ struct ChatView: View {
                 onDelete: { viewModel.delete($0) },
                 onDeleteAll: { viewModel.deleteAll() }
             )
+        }
+        .sheet(isPresented: $showSettings) {
+            SettingsView(viewModel: viewModel)
         }
     }
 
@@ -72,6 +76,9 @@ struct ChatView: View {
                 }
                 iconButton(systemName: "square.and.pencil", help: "New chat") {
                     viewModel.startNew()
+                }
+                iconButton(systemName: "slider.horizontal.3", help: "Model server") {
+                    showSettings = true
                 }
             }
 

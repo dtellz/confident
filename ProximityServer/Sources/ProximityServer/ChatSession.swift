@@ -7,7 +7,11 @@ import Foundation
 actor ChatSession {
 
     private let transport: MultipeerServer
-    private let llm: LMStudioClient
+    /// The active backend client. Mutable: switching ports rebuilds it so chat
+    /// and title requests route to the newly selected local server.
+    private var llm: LMStudioClient
+    /// Port the active backend is reachable on (always `localhost`).
+    private var activePort: Int
     private let systemPrompt: String
 
     /// Latest in-flight task per peer. New requests cancel the previous one so
@@ -19,6 +23,8 @@ actor ChatSession {
          systemPrompt: String = "You are a helpful assistant running locally on the user's MacBook. Keep responses concise unless asked otherwise.") {
         self.transport = transport
         self.llm = llm
+        self.activePort = URLComponents(url: llm.configuration.baseURL,
+                                        resolvingAgainstBaseURL: false)?.port ?? 1234
         self.systemPrompt = systemPrompt
     }
 
@@ -36,6 +42,10 @@ actor ChatSession {
                 handleChat(history: history, from: peer)
             case .frame(let peer, .generateTitle(let history)):
                 handleGenerateTitle(history: history, from: peer)
+            case .frame(let peer, .detectBackends):
+                handleDetectBackends(from: peer)
+            case .frame(let peer, .setBackend(let port)):
+                handleSetBackend(port: port, from: peer)
             }
         }
     }
@@ -101,6 +111,47 @@ actor ChatSession {
             }
         }
         inFlight[peer] = task
+    }
+
+    // MARK: - Backend selection
+
+    /// Probe the known local ports (plus whatever is active) and report status
+    /// to the requesting peer so it can render the autodetect indicator.
+    private func handleDetectBackends(from peer: MCPeerID) {
+        let active = activePort
+        Log.info("Session", "Detect backends ← \(peer.displayName) (active=\(active))")
+        Task { [transport] in
+            let statuses = await BackendDetector.detectAll(extraPort: active)
+            let summary = statuses.map { "\($0.port)\($0.online ? "✓" : "·")" }.joined(separator: " ")
+            Log.info("Session", "Detect → \(peer.displayName): \(summary)")
+            try? transport.send(.backends(statuses: statuses, activePort: active), to: peer)
+        }
+    }
+
+    /// Switch the active backend to `port`, re-probe to grab the served model id,
+    /// rebuild the LM client, and reply with a fresh status snapshot.
+    private func handleSetBackend(port: Int, from peer: MCPeerID) {
+        Log.info("Session", "Set backend ← \(peer.displayName): port \(port)")
+        activePort = port
+        Task { [weak self] in
+            let result = await BackendDetector.probe(port: port)
+            await self?.applyBackend(port: port, model: result.model, replyTo: peer)
+        }
+    }
+
+    private func applyBackend(port: Int, model: String?, replyTo peer: MCPeerID) async {
+        guard let baseURL = URL(string: "http://localhost:\(port)") else { return }
+        var config = llm.configuration
+        config.baseURL = baseURL
+        // Use the model id the server actually reports when available — MLX's
+        // server validates this field — falling back to the generic name.
+        config.model = model ?? "local-model"
+        llm = LMStudioClient(configuration: config)
+        activePort = port
+        Log.info("Session", "Active backend = \(baseURL.absoluteString) model=\(config.model)")
+
+        let statuses = await BackendDetector.detectAll(extraPort: port)
+        try? transport.send(.backends(statuses: statuses, activePort: port), to: peer)
     }
 
     // MARK: - Helpers

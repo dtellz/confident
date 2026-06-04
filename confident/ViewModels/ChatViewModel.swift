@@ -20,6 +20,24 @@ final class ChatViewModel {
     private(set) var attachedImages: [Data] = []
     static let maxAttachments = 4
 
+    // MARK: - Backend selection
+
+    /// Latest probe of the Mac's local LLM ports, as reported by the server.
+    private(set) var backendStatuses: [ChatProtocol.BackendStatus] = []
+    /// Port the server is currently routing chat requests to.
+    private(set) var activeBackendPort: Int = 0
+    /// True while a detect/switch request is in flight (drives a spinner).
+    private(set) var isDetectingBackends = false
+
+    private static let preferredPortKey = "preferredBackendPort"
+
+    /// User's chosen backend port, persisted across launches. `0` means "no
+    /// preference — let the server keep whatever it auto-detected on boot."
+    private var preferredPort: Int {
+        get { UserDefaults.standard.integer(forKey: Self.preferredPortKey) }
+        set { UserDefaults.standard.set(newValue, forKey: Self.preferredPortKey) }
+    }
+
     private let transport: MultipeerClient
     private var modelContext: ModelContext?
 
@@ -39,6 +57,7 @@ final class ChatViewModel {
 
     init(transport: MultipeerClient? = nil) {
         self.transport = transport ?? MultipeerClient(displayName: UIDevice.current.name)
+        self.activeBackendPort = UserDefaults.standard.integer(forKey: Self.preferredPortKey)
     }
 
     func bind(to context: ModelContext) {
@@ -69,6 +88,7 @@ final class ChatViewModel {
                 self.connectionState = s
                 if !wasConnected && nowConnected {
                     self.resumeOrphanStreamsIfNeeded()
+                    self.syncBackendOnConnect()
                 }
                 self.previousConnectionState = s
             }
@@ -206,6 +226,56 @@ final class ChatViewModel {
             applyTitle(content)
         case .error(let message):
             replaceStreamingMessage(withError: message)
+        case .backends(let statuses, let activePort):
+            backendStatuses = statuses
+            activeBackendPort = activePort
+            isDetectingBackends = false
+        }
+    }
+
+    // MARK: - Backend selection
+
+    /// On (re)connect, push the saved port preference to the server (which is
+    /// stateless and may have restarted), or just ask for a fresh probe.
+    private func syncBackendOnConnect() {
+        let port = preferredPort
+        do {
+            if port > 0 {
+                isDetectingBackends = true
+                try transport.send(.setBackend(port: port))
+            } else {
+                isDetectingBackends = true
+                try transport.send(.detectBackends)
+            }
+        } catch {
+            isDetectingBackends = false
+            Log.warn("ViewModel", "Backend sync on connect failed: \(error)")
+        }
+    }
+
+    /// Re-probe the Mac's known local ports. No-op when disconnected.
+    func detectBackends() {
+        guard isConnected else { return }
+        isDetectingBackends = true
+        do {
+            try transport.send(.detectBackends)
+        } catch {
+            isDetectingBackends = false
+            Log.warn("ViewModel", "detectBackends failed: \(error)")
+        }
+    }
+
+    /// Choose the port the model is served on. Persisted and pushed to the server.
+    func selectBackend(port: Int) {
+        preferredPort = port
+        activeBackendPort = port
+        guard isConnected else { return }
+        isDetectingBackends = true
+        do {
+            try transport.send(.setBackend(port: port))
+        } catch {
+            isDetectingBackends = false
+            Log.warn("ViewModel", "selectBackend(\(port)) failed: \(error)")
         }
     }
 
