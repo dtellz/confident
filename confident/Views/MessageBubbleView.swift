@@ -24,6 +24,24 @@ struct MessageBubbleView: View {
         }
     }
 
+    /// User turns render as plain text (they typed it). Assistant/system turns
+    /// render Markdown, since that's what the models emit.
+    @ViewBuilder
+    private var messageText: some View {
+        switch message.role {
+        case .user:
+            Text(displayContent)
+                .textSelection(.enabled)
+                .font(font)
+                .foregroundStyle(textColor)
+                .multilineTextAlignment(.leading)
+                .fixedSize(horizontal: false, vertical: true)
+        case .assistant, .system:
+            MarkdownText(text: displayContent, baseFont: font, textColor: textColor)
+                .textSelection(.enabled)
+        }
+    }
+
     // MARK: - Components
 
     private var assistantAvatar: some View {
@@ -44,12 +62,7 @@ struct MessageBubbleView: View {
                 imageStack
             }
             if !message.content.isEmpty || message.isStreaming {
-                Text(displayContent)
-                    .textSelection(.enabled)
-                    .font(font)
-                    .foregroundStyle(textColor)
-                    .multilineTextAlignment(.leading)
-                    .fixedSize(horizontal: false, vertical: true)
+                messageText
             }
         }
         .padding(.horizontal, 12)
