@@ -9,6 +9,10 @@ struct ChatView: View {
     @State private var didStart = false
     @State private var showHistory = false
     @State private var showSettings = false
+    /// Whether the message list is currently near its bottom edge. Streaming
+    /// auto-scroll only "sticks" while this is true, so scrolling up to read
+    /// mid-response stops the view from yanking back down.
+    @State private var isPinnedToBottom = true
 
     var body: some View {
         ZStack {
@@ -148,15 +152,25 @@ struct ChatView: View {
                 .animation(.spring(response: 0.4, dampingFraction: 0.85), value: currentMessages.count)
             }
             .scrollDismissesKeyboard(.interactively)
+            .onScrollGeometryChange(for: Bool.self) { geo in
+                // Near-bottom when the visible region's bottom edge is within a
+                // small threshold of the content's end.
+                geo.contentSize.height - geo.visibleRect.maxY < 100
+            } action: { _, nearBottom in
+                isPinnedToBottom = nearBottom
+            }
             .onChange(of: currentMessages.last?.id) { _, _ in
                 guard let id = currentMessages.last?.id else { return }
+                // A new turn (user sent, or a fresh assistant bubble) re-pins to
+                // the bottom so the conversation snaps forward.
+                isPinnedToBottom = true
                 withAnimation(.easeOut(duration: 0.2)) {
                     proxy.scrollTo(id, anchor: .bottom)
                 }
             }
             .task(id: currentMessages.last?.id) {
                 while !Task.isCancelled, viewModel.isAssistantTyping {
-                    if let id = currentMessages.last?.id {
+                    if isPinnedToBottom, let id = currentMessages.last?.id {
                         proxy.scrollTo(id, anchor: .bottom)
                     }
                     try? await Task.sleep(for: .milliseconds(80))
